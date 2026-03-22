@@ -181,13 +181,30 @@ def compute_ratios(returns_series: pd.Series, portfolio_returns: pd.Series,
     beta, alpha = None, None
     treynor = None
     if benchmark_returns is not None and len(benchmark_returns) > 10:
-        aligned = portfolio_returns.align(benchmark_returns, join="inner")
-        p_al, b_al = aligned
-        if len(p_al) > 10:
-            cov_mat = np.cov(p_al, b_al)
-            beta    = cov_mat[0, 1] / cov_mat[1, 1]
-            alpha   = (ann_return - RISK_FREE_RATE) - beta * ((b_al.mean() * 252) - RISK_FREE_RATE)
-            treynor = (ann_return - RISK_FREE_RATE) / beta if beta != 0 else None
+        try:
+            # Ensure both are plain float Series with DatetimeIndex
+            p_series = pd.Series(portfolio_returns.values.flatten(),
+                                 index=pd.to_datetime(portfolio_returns.index))
+            b_series = pd.Series(benchmark_returns.values.flatten(),
+                                 index=pd.to_datetime(benchmark_returns.index))
+            # Align on common dates
+            p_al, b_al = p_series.align(b_series, join="inner")
+            p_al = p_al.dropna()
+            b_al = b_al.dropna()
+            # Re-align after dropna
+            p_al, b_al = p_al.align(b_al, join="inner")
+            if len(p_al) > 10 and len(b_al) > 10:
+                p_arr = np.array(p_al, dtype=float)
+                b_arr = np.array(b_al, dtype=float)
+                cov_mat = np.cov(p_arr, b_arr)
+                var_b   = np.var(b_arr, ddof=1)
+                if var_b != 0:
+                    beta    = cov_mat[0, 1] / var_b
+                    b_ann   = float(b_arr.mean()) * 252
+                    alpha   = (ann_return - RISK_FREE_RATE) - beta * (b_ann - RISK_FREE_RATE)
+                    treynor = (ann_return - RISK_FREE_RATE) / beta if beta != 0 else None
+        except Exception:
+            beta, alpha, treynor = None, None, None
 
     return {
         "ann_return": ann_return,
