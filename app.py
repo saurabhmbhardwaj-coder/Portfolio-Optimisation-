@@ -189,24 +189,54 @@ def port_perf(w, mr, cov, rf=RISK_FREE_RATE):
     v = np.sqrt(w @ cov @ w)*np.sqrt(252)
     return r, v, (r-rf)/v if v!=0 else 0
 
+def _neg_sharpe(w, mr, cov):
+    r, v, s = port_perf(w, mr, cov)
+    return -s
+
+def _min_vol(w, mr, cov):
+    r, v, s = port_perf(w, mr, cov)
+    return v
+
+def _port_ret(w, mr, cov):
+    return port_perf(w, mr, cov)[0]
+
+def _sum_to_one(w):
+    return np.sum(w) - 1.0
+
 def optimize(mr, cov, obj="sharpe"):
-    n=len(mr); b=tuple((0,1) for _ in range(n)); c={"type":"eq","fun":lambda x:np.sum(x)-1}
-    f = (lambda w,m,c_,rf: -port_perf(w,m,c_,rf)[2]) if obj=="sharpe" \
-        else (lambda w,m,c_,rf: port_perf(w,m,c_,rf)[1])
-    return minimize(f,[1/n]*n,args=(mr,cov),method="SLSQP",bounds=b,constraints=c,
-                    options={"maxiter":1000})
+    n   = len(mr)
+    b   = tuple((0.0, 1.0) for _ in range(n))
+    c   = {"type": "eq", "fun": _sum_to_one}
+    f   = _neg_sharpe if obj == "sharpe" else _min_vol
+    x0  = np.array([1.0 / n] * n)
+    return minimize(f, x0, args=(mr, cov), method="SLSQP",
+                    bounds=b, constraints=c, options={"maxiter": 1000})
 
 def ef_points(mr, cov, n=150):
-    res={"returns":[],"volatility":[],"sharpe":[]}
-    n_=len(mr); b=tuple((0,1) for _ in range(n_))
-    for t in np.linspace(mr.min()*252, mr.max()*252, n):
-        cs=[{"type":"eq","fun":lambda x:np.sum(x)-1},
-            {"type":"eq","fun":lambda x,tt=t: port_perf(x,mr,cov)[0]-tt}]
-        r_=minimize(lambda w,m,c_,rf:port_perf(w,m,c_,rf)[1],[1/n_]*n_,args=(mr,cov),
-                    method="SLSQP",bounds=b,constraints=cs,options={"maxiter":500})
+    res  = {"returns": [], "volatility": [], "sharpe": []}
+    n_   = len(mr)
+    b    = tuple((0.0, 1.0) for _ in range(n_))
+    x0   = np.array([1.0 / n_] * n_)
+    for target in np.linspace(float(mr.min()) * 252, float(mr.max()) * 252, n):
+        cs = [
+            {"type": "eq", "fun": _sum_to_one},
+            {"type": "eq", "fun": _port_ret,
+             "args": (mr, cov),
+             "jac": None},
+        ]
+        # Override the return constraint with a closure-free version
+        _t = float(target)
+        def _ret_constraint(w, _mr=mr, _cov=cov, _t=_t):
+            return port_perf(w, _mr, _cov)[0] - _t
+        cs[1] = {"type": "eq", "fun": _ret_constraint}
+        r_ = minimize(_min_vol, x0.copy(), args=(mr, cov),
+                      method="SLSQP", bounds=b, constraints=cs,
+                      options={"maxiter": 500})
         if r_.success:
-            rv,vv,sv=port_perf(r_.x,mr,cov)
-            res["returns"].append(rv*100); res["volatility"].append(vv*100); res["sharpe"].append(sv)
+            rv, vv, sv = port_perf(r_.x, mr, cov)
+            res["returns"].append(rv * 100)
+            res["volatility"].append(vv * 100)
+            res["sharpe"].append(sv)
     return res
 
 def hurst(ts, max_lag=20):
