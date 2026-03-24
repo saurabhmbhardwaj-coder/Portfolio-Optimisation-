@@ -43,7 +43,8 @@ st.markdown("""
         text-shadow: 0 0 40px rgba(56,189,248,0.3);
     }
     .brand-sub {
-        text-align: center; font-size: 12px; color: #7dd3fc;
+        text-align: center; font-size: 12px; color: #f5e6c8;
+        color: #f0deb4;
         margin-bottom: 24px; letter-spacing: 4px; text-transform: uppercase;
         opacity: 0.85;
     }
@@ -62,11 +63,11 @@ st.markdown("""
         box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(56,189,248,0.1);
     }
     .metric-title  {
-        font-size: 10px; color: #7dd3fc; font-weight: 700;
+        font-size: 10px; color: #f5e6c8; font-weight: 700;
         text-transform: uppercase; letter-spacing: 1.5px;
     }
-    .metric-value  { font-size: 22px; font-weight: 800; color: #e0f2fe; margin: 6px 0 4px; }
-    .metric-interp { font-size: 12px; color: #93c5fd; line-height: 1.6; }
+    .metric-value  { font-size: 22px; font-weight: 800; color: #fdf6e3; margin: 6px 0 4px; }
+    .metric-interp { font-size: 12px; color: #e8d5a0; line-height: 1.6; }
 
     /* ── LEARN CARDS ── */
     .learn-card {
@@ -76,19 +77,19 @@ st.markdown("""
         border-top: 1px solid rgba(6,182,212,0.2);
         box-shadow: 0 4px 16px rgba(0,0,0,0.35);
     }
-    .learn-title   { font-size: 15px; font-weight: 800; color: #38bdf8; margin-bottom: 6px; }
+    .learn-title   { font-size: 15px; font-weight: 800; color: #fde68a; margin-bottom: 6px; }
     .learn-formula {
         font-size: 12px; color: #fde68a; font-family: monospace;
         background: rgba(0,0,0,0.4); padding: 5px 12px; border-radius: 6px;
         margin: 6px 0 8px; display: inline-block;
         border: 1px solid rgba(253,230,138,0.25);
     }
-    .learn-desc    { font-size: 13px; color: #bae6fd; line-height: 1.65; }
+    .learn-desc    { font-size: 13px; color: #f0deb4; line-height: 1.65; }
 
     /* ── SECTION HEADERS ── */
     .section-hdr {
         font-size: 22px; font-weight: 800; margin: 20px 0 14px 0;
-        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        background: linear-gradient(90deg, #fde68a, #f0abfc);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         letter-spacing: 0.5px;
     }
@@ -101,12 +102,12 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab"] {
         background: transparent; border-radius: 8px;
-        color: #7dd3fc; font-weight: 600; font-size: 14px;
+        color: #f5e6c8; font-weight: 600; font-size: 14px;
         padding: 8px 18px;
     }
     .stTabs [aria-selected="true"] {
         background: linear-gradient(90deg, #1e40af, #0e7490) !important;
-        color: #e0f2fe !important;
+        color: #fdf6e3 !important;
         box-shadow: 0 2px 12px rgba(56,189,248,0.3);
     }
 
@@ -125,14 +126,14 @@ st.markdown("""
     }
 
     /* ── INPUT LABELS ── */
-    label, .stMarkdown p strong { color: #7dd3fc !important; }
+    label, .stMarkdown p strong { color: #f5e6c8 !important; }
 
     /* ── DIVIDER ── */
     hr { border-color: rgba(56,189,248,0.15) !important; }
 
     /* ── METRICS (st.metric) ── */
-    [data-testid="stMetricValue"]  { color: #e0f2fe !important; font-weight: 800; }
-    [data-testid="stMetricLabel"]  { color: #7dd3fc !important; }
+    [data-testid="stMetricValue"]  { color: #fdf6e3 !important; font-weight: 800; }
+    [data-testid="stMetricLabel"]  { color: #f5e6c8 !important; }
 
     /* ── DATAFRAME ── */
     [data-testid="stDataFrame"] { border: 1px solid rgba(56,189,248,0.2); border-radius: 10px; }
@@ -144,7 +145,7 @@ st.markdown("""
     [data-testid="stAlert"] { border-radius: 10px; }
 
     /* ── CAPTION ── */
-    .stCaption, small { color: #93c5fd !important; }
+    .stCaption, small { color: #e8d5a0 !important; }
 
     /* ── CHART CONTAINER ── */
     [data-testid="stPlotlyChart"] > div {
@@ -810,8 +811,24 @@ with ch:
 
 st.markdown("---")
 
-# ── GUARD RAILS ───────────────────────────────────────────────────────────────
-if not run:
+# ── SESSION STATE CACHE KEY ───────────────────────────────────────────────────
+# Build a key from the current inputs. If it matches what's cached, we skip
+# re-fetching and re-optimising — even when the slider triggers a rerun.
+_cache_key = f"{sorted(selected_names)}|{period}|{opt_obj}|{investment}"
+
+# If Run was clicked, clear any stale cache for a different config
+if run:
+    st.session_state["_computed"]  = None
+    st.session_state["_cache_key"] = None
+
+# Check if we have fresh cached results for the current inputs
+_have_results = (
+    st.session_state.get("_cache_key") == _cache_key
+    and st.session_state.get("_computed") is not None
+)
+
+# ── SHOW LANDING PAGE if nothing computed yet ─────────────────────────────────
+if not _have_results and not run:
     st.info("Select your stocks, set your amount and horizon, then click Run Optimisation.")
     st.markdown("""
     **What this tool does**
@@ -829,79 +846,98 @@ if not run:
     """)
     st.stop()
 
-if investment <= 0:
-    st.error("Investment amount must be greater than zero.")
-    st.stop()
+# ── VALIDATE INPUTS ───────────────────────────────────────────────────────────
+if not _have_results:
+    if investment <= 0:
+        st.error("Investment amount must be greater than zero.")
+        st.stop()
+    if len(selected_names) < 2:
+        st.error("Please select at least 2 stocks.")
+        st.stop()
+    if len(selected_names) > MAX_STOCKS:
+        st.error(f"Please reduce your selection to {MAX_STOCKS} stocks or fewer.")
+        st.stop()
 
-if len(selected_names) < 2:
-    st.error("Please select at least 2 stocks.")
-    st.stop()
+    tickers = [t for t in [get_ticker(n) for n in selected_names] if t]
+    if len(tickers) < 2:
+        st.error("Could not resolve stock tickers. Please re-select your stocks.")
+        st.stop()
 
-if len(selected_names) > MAX_STOCKS:
-    st.error(f"Please reduce your selection to {MAX_STOCKS} stocks or fewer.")
-    st.stop()
+    # ── FETCH ─────────────────────────────────────────────────────────────────
+    with st.spinner("Fetching market data from NSE…"):
+        prices = fetch_prices(tuple(tickers), period)
 
-# Resolve tickers
-tickers = [t for t in [get_ticker(n) for n in selected_names] if t]
-if len(tickers) < 2:
-    st.error("Could not resolve stock tickers. Please re-select your stocks.")
-    st.stop()
+    if prices.empty or prices.shape[1] < 2:
+        st.error("Not enough data returned. Try a longer horizon or different stocks.")
+        st.stop()
 
-# ── FETCH DATA ────────────────────────────────────────────────────────────────
-with st.spinner("Fetching market data from NSE…"):
-    prices = fetch_prices(tuple(tickers), period)
+    t2n    = {get_ticker(n): short_name(n) for n in selected_names}
+    prices.columns = [t2n.get(c, c) for c in prices.columns]
+    vn     = list(prices.columns)
 
-if prices.empty or prices.shape[1] < 2:
-    st.error("Not enough data returned. Try a longer horizon or different stocks.")
-    st.stop()
+    if len(vn) < 2:
+        st.error("Too few stocks had data. Try different selections.")
+        st.stop()
+    if len(prices) < max(30, len(vn) + 5):
+        st.error("Not enough trading days. Choose a longer horizon.")
+        st.stop()
 
-# Map columns back to display names
-t2n = {get_ticker(n): short_name(n) for n in selected_names}
-prices.columns = [t2n.get(c, c) for c in prices.columns]
-vn   = list(prices.columns)
+    rets = compute_returns(prices)
+    if rets.empty or rets.shape[1] < 2:
+        st.error("Could not compute returns. Try different stocks or a longer period.")
+        st.stop()
 
-if len(vn) < 2:
-    st.error("Too few stocks had sufficient data. Please try different selections.")
-    st.stop()
+    vn   = [c for c in vn if c in rets.columns]
+    rets = rets[vn]
+    mr   = rets.mean()
+    cov  = rets.cov()
 
-min_rows = max(30, len(vn) + 5)
-if len(prices) < min_rows:
-    st.error(f"Only {len(prices)} trading days of data found. Please choose a longer horizon.")
-    st.stop()
+    # ── OPTIMISE ──────────────────────────────────────────────────────────────
+    with st.spinner("Running Markowitz optimisation…"):
+        obj_key = "sharpe" if "Sharpe" in opt_obj else "min_vol"
+        w       = optimize_portfolio(mr, cov, objective=obj_key)
 
-rets = compute_returns(prices)
-if rets.empty or rets.shape[1] < 2:
-    st.error("Could not compute returns. Please try different stocks or a longer period.")
-    st.stop()
+    if w is None or len(w) != len(vn):
+        st.error("Optimisation failed. Try different stocks or a longer period.")
+        st.stop()
 
-vn   = [c for c in vn if c in rets.columns]
-rets = rets[vn]
-mr   = rets.mean()
-cov  = rets.cov()
+    opt_r, opt_v, opt_s = port_perf(w, mr.values, cov.values)
 
-# ── OPTIMISE ──────────────────────────────────────────────────────────────────
-with st.spinner("Running Markowitz optimisation…"):
-    obj_key = "sharpe" if "Sharpe" in opt_obj else "min_vol"
-    w       = optimize_portfolio(mr, cov, objective=obj_key)
+    # ── BENCHMARK ─────────────────────────────────────────────────────────────
+    with st.spinner("Fetching Nifty 50 benchmark…"):
+        try:
+            braw = yf.download("^NSEI", period=period, auto_adjust=True, progress=False)
+            bp   = braw["Close"].ffill().bfill() if "Close" in braw.columns else None
+            br   = bp.pct_change().replace([np.inf, -np.inf], np.nan).dropna() \
+                   if bp is not None and len(bp) > 5 else None
+        except Exception:
+            br = None
 
-if w is None or len(w) != len(vn):
-    st.error("Optimisation failed. Please try different stocks or a longer period.")
-    st.stop()
+    pd_  = rets[vn].dot(w)
+    rat  = compute_ratios(pd_, br)
 
-opt_r, opt_v, opt_s = port_perf(w, mr.values, cov.values)
+    # ── CACHE EVERYTHING ──────────────────────────────────────────────────────
+    st.session_state["_computed"] = dict(
+        vn=vn, rets=rets, mr=mr, cov=cov, w=w,
+        opt_r=opt_r, opt_v=opt_v, opt_s=opt_s,
+        pd_=pd_, rat=rat, br=br, investment=investment,
+    )
+    st.session_state["_cache_key"] = _cache_key
 
-# ── BENCHMARK ─────────────────────────────────────────────────────────────────
-with st.spinner("Fetching Nifty 50 benchmark…"):
-    try:
-        braw = yf.download("^NSEI", period=period, auto_adjust=True, progress=False)
-        bp   = braw["Close"].ffill().bfill() if "Close" in braw.columns else None
-        br   = bp.pct_change().replace([np.inf, -np.inf], np.nan).dropna() \
-               if bp is not None and len(bp) > 5 else None
-    except Exception:
-        br = None
-
-pd_  = rets[vn].dot(w)
-rat  = compute_ratios(pd_, br)
+# ── RESTORE FROM CACHE (covers slider reruns) ─────────────────────────────────
+_c       = st.session_state["_computed"]
+vn       = _c["vn"]
+rets     = _c["rets"]
+mr       = _c["mr"]
+cov      = _c["cov"]
+w        = _c["w"]
+opt_r    = _c["opt_r"]
+opt_v    = _c["opt_v"]
+opt_s    = _c["opt_s"]
+pd_      = _c["pd_"]
+rat      = _c["rat"]
+br       = _c["br"]
+investment = _c["investment"]
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
 t1, t2, t3, t4, t5, t6 = st.tabs([
@@ -970,8 +1006,8 @@ with t1:
             paper_bgcolor="rgba(2,11,24,0)",
             plot_bgcolor="rgba(5,24,48,0.6)",
             hovermode="x unified",
-            font=dict(color="#bae6fd"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
+            font=dict(color="#f0deb4"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#f0deb4")),
         )
         fig_cum.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
         fig_cum.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
@@ -1038,8 +1074,8 @@ with t2:
             paper_bgcolor="rgba(2,11,24,0)",
             plot_bgcolor="rgba(5,24,48,0.6)",
             hovermode="closest",
-            font=dict(color="#bae6fd"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
+            font=dict(color="#f0deb4"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#f0deb4")),
         )
         fig_ef.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
         fig_ef.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
@@ -1123,7 +1159,7 @@ with t3:
             fig_vol.add_trace(go.Scatter(
                 x=pvol_series.index, y=pvol_series.values,
                 name="PORTFOLIO", mode="lines",
-                line=dict(width=3, color="#e0f2fe", dash="dash")))
+                line=dict(width=3, color="#fdf6e3", dash="dash")))
             any_trace = True
 
         if any_trace:
@@ -1132,13 +1168,13 @@ with t3:
                 paper_bgcolor="rgba(2,11,24,0)",
                 plot_bgcolor="rgba(5,24,48,0.6)",
                 hovermode="x unified",
-                legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
-                font=dict(color="#bae6fd"),
+                legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#f0deb4")),
+                font=dict(color="#f0deb4"),
             )
             fig_vol.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)",
-                                  color="#7dd3fc")
+                                  color="#f5e6c8")
             fig_vol.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)",
-                                  color="#7dd3fc")
+                                  color="#f5e6c8")
             st.plotly_chart(fig_vol, use_container_width=True)
         else:
             st.info("Increase the data horizon to see rolling volatility at this window size.")
@@ -1173,7 +1209,7 @@ with t3:
             fig_rr.update_layout(
                 paper_bgcolor="rgba(2,11,24,0)",
                 plot_bgcolor="rgba(5,24,48,0.6)",
-                font=dict(color="#bae6fd"),
+                font=dict(color="#f0deb4"),
                 legend=dict(bgcolor="rgba(0,0,0,0)"))
             st.plotly_chart(fig_rr, use_container_width=True)
     except Exception as e:
@@ -1193,7 +1229,7 @@ with t3:
             title="Portfolio Drawdown (%)",
             paper_bgcolor="rgba(2,11,24,0)",
             plot_bgcolor="rgba(5,24,48,0.6)",
-            font=dict(color="#bae6fd"))
+            font=dict(color="#f0deb4"))
         st.plotly_chart(fig_dd, use_container_width=True)
     except Exception as e:
         st.warning(f"Drawdown chart could not be rendered: {e}")
@@ -1209,7 +1245,7 @@ with t3:
             title="Daily Return Distribution",
             paper_bgcolor="rgba(2,11,24,0)",
             plot_bgcolor="rgba(5,24,48,0.6)",
-            font=dict(color="#bae6fd"))
+            font=dict(color="#f0deb4"))
         st.plotly_chart(fig_hist, use_container_width=True)
     except Exception as e:
         st.warning(f"Distribution chart could not be rendered: {e}")
@@ -1237,7 +1273,7 @@ with t4:
             paper_bgcolor="rgba(2,11,24,0)",
             plot_bgcolor="rgba(5,24,48,0.6)",
             height=max(400, len(vn) * 40),
-            font=dict(color="#bae6fd"),
+            font=dict(color="#f0deb4"),
         )
         st.plotly_chart(fig_cr, use_container_width=True)
     except Exception as e:
