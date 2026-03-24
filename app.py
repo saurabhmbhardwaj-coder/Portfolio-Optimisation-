@@ -15,7 +15,7 @@ TRADING_DAYS   = 252
 
 # ── PAGE CONFIG ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Bhardwaj Solutions — Portfolio Optimisation",
+    page_title="Optimisation Solutions — Portfolio Tool",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -23,52 +23,134 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    /* ── HIDE SIDEBAR ── */
     [data-testid="collapsedControl"]  { display: none; }
     section[data-testid="stSidebar"] { display: none; }
 
+    /* ── APP BACKGROUND: rich layered blue ── */
+    .stApp {
+        background: linear-gradient(160deg, #020b18 0%, #051830 35%, #072a52 65%, #0a1f3d 100%);
+        min-height: 100vh;
+    }
+    .main .block-container { padding-top: 1.5rem; }
+
+    /* ── HEADER ── */
     .brand-title {
-        text-align: center; font-size: 38px; font-weight: 800;
-        background: linear-gradient(90deg, #7c6cf8, #06b6d4);
+        text-align: center; font-size: 42px; font-weight: 900;
+        background: linear-gradient(90deg, #38bdf8, #818cf8, #06b6d4);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        margin-bottom: 2px; letter-spacing: 1px;
+        margin-bottom: 4px; letter-spacing: 2px;
+        text-shadow: 0 0 40px rgba(56,189,248,0.3);
     }
     .brand-sub {
-        text-align: center; font-size: 13px; color: #888;
-        margin-bottom: 20px; letter-spacing: 3px; text-transform: uppercase;
+        text-align: center; font-size: 12px; color: #7dd3fc;
+        margin-bottom: 24px; letter-spacing: 4px; text-transform: uppercase;
+        opacity: 0.85;
     }
+    .brand-divider {
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, #06b6d4, transparent);
+        margin: 0 auto 24px auto; width: 60%; border-radius: 2px;
+    }
+
+    /* ── METRIC CARDS ── */
     .metric-card {
-        background: #1a1a2e; border-radius: 12px;
-        padding: 14px 18px; margin-bottom: 10px;
-        border-left: 4px solid #7c6cf8;
+        background: linear-gradient(135deg, #0c2340 0%, #0e2d52 100%);
+        border-radius: 14px; padding: 16px 20px; margin-bottom: 12px;
+        border-left: 4px solid #38bdf8;
+        border-top: 1px solid rgba(56,189,248,0.2);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(56,189,248,0.1);
     }
-    .metric-title  { font-size: 11px; color: #aaa; font-weight: 600;
-                     text-transform: uppercase; letter-spacing: 1px; }
-    .metric-value  { font-size: 22px; font-weight: 700; color: #fff; margin: 4px 0; }
-    .metric-interp { font-size: 12px; color: #ccc; margin-top: 4px; line-height: 1.5; }
+    .metric-title  {
+        font-size: 10px; color: #7dd3fc; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1.5px;
+    }
+    .metric-value  { font-size: 22px; font-weight: 800; color: #e0f2fe; margin: 6px 0 4px; }
+    .metric-interp { font-size: 12px; color: #93c5fd; line-height: 1.6; }
+
+    /* ── LEARN CARDS ── */
     .learn-card {
-        background: #111827; border-radius: 10px;
-        padding: 14px 18px; margin-bottom: 8px;
-        border-left: 3px solid #06b6d4;
+        background: linear-gradient(135deg, #0c1f38 0%, #0f2847 100%);
+        border-radius: 12px; padding: 16px 20px; margin-bottom: 10px;
+        border-left: 4px solid #06b6d4;
+        border-top: 1px solid rgba(6,182,212,0.2);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
     }
-    .learn-title   { font-size: 15px; font-weight: 700; color: #06b6d4; margin-bottom: 4px; }
-    .learn-formula { font-size: 12px; color: #fbbf24; font-family: monospace;
-                     background: #0f0f1a; padding: 4px 10px; border-radius: 4px;
-                     margin: 6px 0; display: inline-block; }
-    .learn-desc    { font-size: 13px; color: #ccc; line-height: 1.6; }
+    .learn-title   { font-size: 15px; font-weight: 800; color: #38bdf8; margin-bottom: 6px; }
+    .learn-formula {
+        font-size: 12px; color: #fde68a; font-family: monospace;
+        background: rgba(0,0,0,0.4); padding: 5px 12px; border-radius: 6px;
+        margin: 6px 0 8px; display: inline-block;
+        border: 1px solid rgba(253,230,138,0.25);
+    }
+    .learn-desc    { font-size: 13px; color: #bae6fd; line-height: 1.65; }
+
+    /* ── SECTION HEADERS ── */
     .section-hdr {
-        font-size: 20px; font-weight: 700; margin: 18px 0 10px 0;
-        background: linear-gradient(90deg, #7c6cf8, #06b6d4);
+        font-size: 22px; font-weight: 800; margin: 20px 0 14px 0;
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        letter-spacing: 0.5px;
     }
+
+    /* ── TABS ── */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(5,24,48,0.8); border-radius: 12px;
+        padding: 4px; gap: 4px;
+        border: 1px solid rgba(56,189,248,0.2);
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent; border-radius: 8px;
+        color: #7dd3fc; font-weight: 600; font-size: 14px;
+        padding: 8px 18px;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(90deg, #1e40af, #0e7490) !important;
+        color: #e0f2fe !important;
+        box-shadow: 0 2px 12px rgba(56,189,248,0.3);
+    }
+
+    /* ── BUTTON ── */
     .stButton > button {
-        background: linear-gradient(90deg, #7c6cf8, #06b6d4);
-        color: white; border: none; border-radius: 10px;
-        font-weight: 700; font-size: 15px;
+        background: linear-gradient(90deg, #1d4ed8, #0891b2);
+        color: white; border: 1px solid rgba(56,189,248,0.4);
+        border-radius: 10px; font-weight: 700; font-size: 15px;
+        box-shadow: 0 4px 16px rgba(29,78,216,0.4);
+        transition: all 0.2s ease;
     }
-    .limit-warning {
-        background: #2a1a1a; border: 1px solid #7c3535;
-        border-radius: 8px; padding: 10px 14px;
-        color: #fca5a5; font-size: 13px; margin-bottom: 10px;
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #2563eb, #0ea5e9);
+        box-shadow: 0 6px 20px rgba(56,189,248,0.5);
+        transform: translateY(-1px);
+    }
+
+    /* ── INPUT LABELS ── */
+    label, .stMarkdown p strong { color: #7dd3fc !important; }
+
+    /* ── DIVIDER ── */
+    hr { border-color: rgba(56,189,248,0.15) !important; }
+
+    /* ── METRICS (st.metric) ── */
+    [data-testid="stMetricValue"]  { color: #e0f2fe !important; font-weight: 800; }
+    [data-testid="stMetricLabel"]  { color: #7dd3fc !important; }
+
+    /* ── DATAFRAME ── */
+    [data-testid="stDataFrame"] { border: 1px solid rgba(56,189,248,0.2); border-radius: 10px; }
+
+    /* ── SLIDERS ── */
+    [data-testid="stSlider"] > div > div > div > div { background: #1d4ed8 !important; }
+
+    /* ── INFO / WARNING / ERROR BOXES ── */
+    [data-testid="stAlert"] { border-radius: 10px; }
+
+    /* ── CAPTION ── */
+    .stCaption, small { color: #93c5fd !important; }
+
+    /* ── CHART CONTAINER ── */
+    [data-testid="stPlotlyChart"] > div {
+        border-radius: 12px;
+        border: 1px solid rgba(56,189,248,0.15);
+        overflow: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -665,8 +747,9 @@ GLOSSARY = [
 #  UI
 # ═════════════════════════════════════════════════════════════════════════════
 
-st.markdown('<div class="brand-title">Bhardwaj Solutions</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-title">Optimisation Solutions</div>', unsafe_allow_html=True)
 st.markdown('<div class="brand-sub">Portfolio Optimisation Tool</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-divider"></div>', unsafe_allow_html=True)
 
 # ── SEARCH BAR ────────────────────────────────────────────────────────────────
 _, sc, _ = st.columns([1, 6, 1])
@@ -865,7 +948,7 @@ with t1:
         )
         fig_pie.update_traces(textposition="inside", textinfo="percent+label")
         fig_pie.update_layout(showlegend=False,
-                              paper_bgcolor="rgba(0,0,0,0)")
+                              paper_bgcolor="rgba(2,11,24,0)")
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # Cumulative return
@@ -884,12 +967,14 @@ with t1:
                 line=dict(color="#f97316", width=1.8, dash="dot")))
         fig_cum.update_layout(
             title="Cumulative Return (%)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(2,11,24,0)",
+            plot_bgcolor="rgba(5,24,48,0.6)",
             hovermode="x unified",
+            font=dict(color="#bae6fd"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
         )
-        fig_cum.update_xaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
-        fig_cum.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
+        fig_cum.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
+        fig_cum.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
         st.plotly_chart(fig_cum, use_container_width=True)
     except Exception as e:
         st.warning(f"Could not render cumulative return chart: {e}")
@@ -950,12 +1035,14 @@ with t2:
             title="Efficient Frontier — Risk vs Return",
             xaxis_title="Annual Volatility (%)",
             yaxis_title="Expected Annual Return (%)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(2,11,24,0)",
+            plot_bgcolor="rgba(5,24,48,0.6)",
             hovermode="closest",
+            font=dict(color="#bae6fd"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
         )
-        fig_ef.update_xaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
-        fig_ef.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
+        fig_ef.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
+        fig_ef.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)")
         st.plotly_chart(fig_ef, use_container_width=True)
 
         st.markdown("""
@@ -976,64 +1063,87 @@ with t3:
     st.markdown('<div class="section-hdr">Risk and Volatility Analysis</div>',
                 unsafe_allow_html=True)
 
-    n_obs = len(rets)
-    # Cap window so there are always enough rows to produce a chart
-    max_window = max(5, min(60, n_obs // 4))
-    default_window = min(21, max_window)
+    # ── Rolling volatility — precompute ALL windows, pick by slider ──────────
+    # This avoids re-fetching data when the slider changes.
+    n_obs       = len(rets)
+    max_window  = max(5, min(60, n_obs // 4))
+    default_win = min(21, max_window)
 
-    win = st.slider(
-        "Rolling window (trading days)",
-        min_value=5,
-        max_value=max_window,
-        value=default_window,
-        help=f"Window capped at {max_window} days based on available data length ({n_obs} trading days).",
+    # Precompute returns matrix as numpy for speed
+    rets_np  = rets[vn].values.astype(float)          # shape (n_obs, n_stocks)
+    port_np  = pd_.values.astype(float)               # shape (n_obs,)
+    dates    = rets.index
+
+    win = st.select_slider(
+        "Rolling volatility window",
+        options=list(range(5, max_window + 1)),
+        value=default_win,
+        help=f"Drag to change window size. Max {max_window} days based on your data.",
     )
 
-    # Rolling volatility — fully guarded
+    # Rolling volatility — fully guarded, computed purely with numpy
     try:
-        if n_obs < win + 5:
-            st.info(f"Not enough data for a {win}-day window. Try a shorter window or longer horizon.")
-        else:
-            min_periods = max(2, win // 3)
-            rv = rets[vn].rolling(window=win, min_periods=min_periods).std()
-            rv = rv.replace([np.inf, -np.inf], np.nan) * np.sqrt(TRADING_DAYS) * 100
+        colors    = px.colors.qualitative.Vivid
+        fig_vol   = go.Figure()
+        any_trace = False
+        actual_win = int(win)
 
-            fig_vol = go.Figure()
-            colors  = px.colors.qualitative.Vivid
-            any_trace = False
-            for i, n in enumerate(vn):
-                col_data = rv[n].dropna()
-                if len(col_data) >= 2:
-                    fig_vol.add_trace(go.Scatter(
-                        x=col_data.index, y=col_data.values,
-                        name=n[:16], mode="lines",
-                        line=dict(width=1.5, color=colors[i % len(colors)])))
-                    any_trace = True
-
-            prv       = pd_.rolling(window=win, min_periods=min_periods).std()
-            prv       = prv.replace([np.inf, -np.inf], np.nan) * np.sqrt(TRADING_DAYS) * 100
-            prv_clean = prv.dropna()
-            if len(prv_clean) >= 2:
+        for i, name in enumerate(vn):
+            col = rets_np[:, i]
+            vol_vals = []
+            for j in range(len(col)):
+                start = max(0, j - actual_win + 1)
+                window_data = col[start:j+1]
+                window_data = window_data[np.isfinite(window_data)]
+                if len(window_data) >= max(2, actual_win // 3):
+                    vol_vals.append(float(np.std(window_data, ddof=1)) * np.sqrt(TRADING_DAYS) * 100)
+                else:
+                    vol_vals.append(np.nan)
+            vol_series = pd.Series(vol_vals, index=dates)
+            clean = vol_series.dropna()
+            if len(clean) >= 2:
                 fig_vol.add_trace(go.Scatter(
-                    x=prv_clean.index, y=prv_clean.values,
-                    name="PORTFOLIO", mode="lines",
-                    line=dict(width=3, color="white", dash="dash")))
+                    x=clean.index, y=clean.values,
+                    name=name[:16], mode="lines",
+                    line=dict(width=1.5, color=colors[i % len(colors)])))
                 any_trace = True
 
-            if any_trace:
-                fig_vol.update_layout(
-                    title=f"{win}-Day Rolling Annualised Volatility (%)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    hovermode="x unified",
-                )
-                fig_vol.update_xaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
-                fig_vol.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.07)")
-                st.plotly_chart(fig_vol, use_container_width=True)
+        # Portfolio line
+        pvol_vals = []
+        for j in range(len(port_np)):
+            start = max(0, j - actual_win + 1)
+            wd = port_np[start:j+1]
+            wd = wd[np.isfinite(wd)]
+            if len(wd) >= max(2, actual_win // 3):
+                pvol_vals.append(float(np.std(wd, ddof=1)) * np.sqrt(TRADING_DAYS) * 100)
             else:
-                st.info("Not enough data points to render rolling volatility for this window size.")
+                pvol_vals.append(np.nan)
+        pvol_series = pd.Series(pvol_vals, index=dates).dropna()
+        if len(pvol_series) >= 2:
+            fig_vol.add_trace(go.Scatter(
+                x=pvol_series.index, y=pvol_series.values,
+                name="PORTFOLIO", mode="lines",
+                line=dict(width=3, color="#e0f2fe", dash="dash")))
+            any_trace = True
+
+        if any_trace:
+            fig_vol.update_layout(
+                title=f"{actual_win}-Day Rolling Annualised Volatility (%)",
+                paper_bgcolor="rgba(2,11,24,0)",
+                plot_bgcolor="rgba(5,24,48,0.6)",
+                hovermode="x unified",
+                legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#bae6fd")),
+                font=dict(color="#bae6fd"),
+            )
+            fig_vol.update_xaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)",
+                                  color="#7dd3fc")
+            fig_vol.update_yaxes(showgrid=True, gridcolor="rgba(56,189,248,0.12)",
+                                  color="#7dd3fc")
+            st.plotly_chart(fig_vol, use_container_width=True)
+        else:
+            st.info("Increase the data horizon to see rolling volatility at this window size.")
     except Exception as e:
-        st.warning(f"Rolling volatility chart could not be rendered: {e}")
+        st.warning(f"Rolling volatility chart: {e}")
 
     # Risk-return scatter
     try:
@@ -1061,8 +1171,10 @@ with t3:
             )
             fig_rr.update_traces(textposition="top center")
             fig_rr.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)")
+                paper_bgcolor="rgba(2,11,24,0)",
+                plot_bgcolor="rgba(5,24,48,0.6)",
+                font=dict(color="#bae6fd"),
+                legend=dict(bgcolor="rgba(0,0,0,0)"))
             st.plotly_chart(fig_rr, use_container_width=True)
     except Exception as e:
         st.warning(f"Risk-return chart could not be rendered: {e}")
@@ -1079,8 +1191,9 @@ with t3:
             fillcolor="rgba(239,68,68,0.2)", name="Drawdown"))
         fig_dd.update_layout(
             title="Portfolio Drawdown (%)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)")
+            paper_bgcolor="rgba(2,11,24,0)",
+            plot_bgcolor="rgba(5,24,48,0.6)",
+            font=dict(color="#bae6fd"))
         st.plotly_chart(fig_dd, use_container_width=True)
     except Exception as e:
         st.warning(f"Drawdown chart could not be rendered: {e}")
@@ -1094,8 +1207,9 @@ with t3:
             marker_color="#7c6cf8", opacity=0.8, name="Daily Returns"))
         fig_hist.update_layout(
             title="Daily Return Distribution",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)")
+            paper_bgcolor="rgba(2,11,24,0)",
+            plot_bgcolor="rgba(5,24,48,0.6)",
+            font=dict(color="#bae6fd"))
         st.plotly_chart(fig_hist, use_container_width=True)
     except Exception as e:
         st.warning(f"Distribution chart could not be rendered: {e}")
@@ -1120,9 +1234,10 @@ with t4:
         ))
         fig_cr.update_layout(
             title="Pairwise Correlation Matrix",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(2,11,24,0)",
+            plot_bgcolor="rgba(5,24,48,0.6)",
             height=max(400, len(vn) * 40),
+            font=dict(color="#bae6fd"),
         )
         st.plotly_chart(fig_cr, use_container_width=True)
     except Exception as e:
@@ -1271,29 +1386,18 @@ with t5:
 with t6:
     st.markdown('<div class="section-hdr">Learn — Complete Ratio Reference</div>',
                 unsafe_allow_html=True)
-    st.caption("Every ratio used in this tool — formula, meaning, and how to interpret values.")
-
-    sl = st.text_input(
-        "Search ratios",
-        placeholder="e.g. Sharpe, Beta, Drawdown, Alpha…",
-        label_visibility="visible",
+    st.caption(
+        "All 34 ratios used in this tool — with formula, plain-English meaning, "
+        "and guidance on how to interpret each value."
     )
 
-    shown = [
-        (title, formula, desc)
-        for title, formula, desc in GLOSSARY
-        if not sl
-        or sl.lower() in title.lower()
-        or sl.lower() in desc.lower()
-    ]
-
-    if not shown:
-        st.warning("No ratios matched your search term.")
-    else:
-        for title, formula, desc in shown:
-            st.markdown(f"""
-            <div class="learn-card">
-                <div class="learn-title">{title}</div>
-                <div class="learn-formula">Formula: {formula}</div>
-                <div class="learn-desc">{desc}</div>
-            </div>""", unsafe_allow_html=True)
+    # Render all ratio cards directly — no search bar, no filtering
+    cards_html = ""
+    for title, formula, desc in GLOSSARY:
+        cards_html += f"""
+        <div class="learn-card">
+            <div class="learn-title">{title}</div>
+            <div class="learn-formula">Formula: {formula}</div>
+            <div class="learn-desc">{desc}</div>
+        </div>"""
+    st.markdown(cards_html, unsafe_allow_html=True)
