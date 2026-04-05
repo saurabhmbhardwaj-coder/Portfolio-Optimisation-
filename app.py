@@ -43,8 +43,7 @@ st.markdown("""
         text-shadow: 0 0 40px rgba(56,189,248,0.3);
     }
     .brand-sub {
-        text-align: center; font-size: 12px; color: #f5e6c8;
-        color: #f0deb4;
+        text-align: center; font-size: 12px; color: #f0deb4;
         margin-bottom: 24px; letter-spacing: 4px; text-transform: uppercase;
         opacity: 0.85;
     }
@@ -304,32 +303,50 @@ def safe_mean(series, annualise=False):
 def fetch_prices(tickers: tuple, period: str) -> pd.DataFrame:
     """Download OHLCV and return a clean Close price DataFrame."""
     try:
-        raw = yf.download(list(tickers), period=period,
-                          auto_adjust=True, progress=False, threads=True)
+        ticker_list = list(tickers)
+        raw = yf.download(ticker_list, period=period,
+                          auto_adjust=True, progress=False)
         if raw.empty:
             return pd.DataFrame()
+
+        # yfinance returns MultiIndex columns for multi-ticker, flat for single
         if isinstance(raw.columns, pd.MultiIndex):
             prices = raw["Close"].copy()
         else:
-            prices = raw[["Close"]].copy()
-            if len(tickers) == 1:
-                prices.columns = list(tickers)
+            # Single-ticker: columns are OHLCV strings
+            if "Close" in raw.columns:
+                prices = raw[["Close"]].copy()
+                prices.columns = ticker_list
+            else:
+                prices = raw.copy()
+
+        # Ensure we have a DataFrame
+        if isinstance(prices, pd.Series):
+            prices = prices.to_frame(name=ticker_list[0])
+
         prices = prices.dropna(axis=1, how="all").ffill().bfill()
-        # Drop columns that are still all-NaN or constant
-        prices = prices.loc[:, prices.std() > 0]
-        return prices
+        # Drop columns that are still all-NaN or have zero variance
+        good = prices.columns[prices.std() > 0]
+        if len(good) == 0:
+            return pd.DataFrame()
+        return prices[good]
     except Exception as e:
         st.error(f"Data fetch failed: {e}")
         return pd.DataFrame()
 
 def compute_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """Daily log returns, cleaned."""
+    """Daily percentage returns, cleaned. Never fills NaN with zero."""
     try:
-        r = prices.pct_change().replace([np.inf, -np.inf], np.nan).dropna(how="all")
-        # Drop any column with >20% missing after the first row
-        threshold = int(len(r) * 0.20)
-        r = r.dropna(axis=1, thresh=len(r) - threshold)
-        r = r.fillna(0)   # fill any remaining NaN with 0 (no change)
+        r = prices.pct_change().replace([np.inf, -np.inf], np.nan)
+        r = r.iloc[1:]  # drop the first all-NaN row from pct_change
+        # Drop columns with more than 30% missing values
+        min_valid = int(len(r) * 0.70)
+        r = r.dropna(axis=1, thresh=min_valid)
+        # Drop rows where ALL remaining columns are NaN
+        r = r.dropna(how="all")
+        # For any remaining scattered NaN (e.g. trading halts), forward-fill
+        # within each column, then drop any still-NaN rows at the start
+        r = r.ffill().dropna()
         return r
     except Exception:
         return pd.DataFrame()
@@ -433,13 +450,19 @@ def efficient_frontier(mr: pd.Series, cov: pd.DataFrame,
     x0    = np.full(n, 1.0 / n)
 
     for target in np.linspace(r_min, r_max, n_points):
-        _t = float(target)
-        def _ret_eq(w, _mr=mr_a, _cov=cv_a, _t=_t):
-            return float(np.dot(w, _mr)) * TRADING_DAYS - _t
+        target_val = float(target)
 
+        # Build constraint using a class to avoid Python closure capture issues
+        class _ReturnEq:
+            def __init__(self, t, m, c):
+                self.t, self.m, self.c = t, m, c
+            def __call__(self, w):
+                return float(np.dot(w, self.m)) * TRADING_DAYS - self.t
+
+        ret_eq = _ReturnEq(target_val, mr_a, cv_a)
         cons = [
             {"type": "eq", "fun": _con_sum_one},
-            {"type": "eq", "fun": _ret_eq},
+            {"type": "eq", "fun": ret_eq},
         ]
         try:
             res = minimize(_obj_min_vol, x0.copy(), args=(mr_a, cv_a),
@@ -447,11 +470,20 @@ def efficient_frontier(mr: pd.Series, cov: pd.DataFrame,
                            options={"maxiter": 500, "ftol": 1e-8})
             if res.success:
                 rv, vv, sv = port_perf(res.x, mr_a, cv_a)
-                result["returns"].append(rv * 100)
-                result["volatility"].append(vv * 100)
-                result["sharpe"].append(sv)
+                # Only keep points that are actually on or near the frontier
+                if vv > 0 and rv is not None:
+                    result["returns"].append(round(rv * 100, 4))
+                    result["volatility"].append(round(vv * 100, 4))
+                    result["sharpe"].append(round(sv, 4))
         except Exception:
             continue
+
+    # Sort by volatility so the frontier line draws cleanly left-to-right
+    if result["volatility"]:
+        zipped = sorted(zip(result["volatility"], result["returns"], result["sharpe"]))
+        result["volatility"] = [x[0] for x in zipped]
+        result["returns"]    = [x[1] for x in zipped]
+        result["sharpe"]     = [x[2] for x in zipped]
     return result
 
 
@@ -474,7 +506,7 @@ def hurst_exponent(ts: np.ndarray, max_lag: int = 20) -> float:
 
 
 def compute_ratios(port_ret: pd.Series,
-                   bench_ret: pd.Series | None = None) -> dict:
+                   bench_ret=None) -> dict:
     """
     Compute all 34 ratios. Every calculation is wrapped in try/except.
     Returns a dict — all values are either float or None.
@@ -534,9 +566,14 @@ def compute_ratios(port_ret: pd.Series,
 
     # ── VaR / CVaR ───────────────────────────────────────────────────────────
     try:
-        var95   = _s(np.percentile(r, 5))
-        cvar95  = _s(r[r <= var95].mean()) if (r <= var95).any() else None
-        var_ann = _s(var95 * np.sqrt(TRADING_DAYS))
+        var95_raw = float(np.percentile(r.dropna(), 5))
+        var95     = _s(var95_raw)
+        if var95 is not None and np.isfinite(var95_raw):
+            tail = r[r <= var95_raw]
+            cvar95  = _s(tail.mean()) if len(tail) > 0 else None
+            var_ann = _s(var95_raw * np.sqrt(TRADING_DAYS))
+        else:
+            cvar95 = var_ann = None
     except: var95 = cvar95 = var_ann = None
 
     # ── Ratios ───────────────────────────────────────────────────────────────
@@ -647,20 +684,28 @@ def compute_ratios(port_ret: pd.Series,
 # ── DISPLAY HELPERS ───────────────────────────────────────────────────────────
 
 def fmt(v, pct: bool = False, dec: int = 3) -> str:
+    """Format a value for display. pct=True multiplies by 100 and adds % sign."""
     if v is None or (isinstance(v, float) and not np.isfinite(v)):
         return "N/A"
-    if pct:
-        return f"{v * 100:.2f}%"
-    return f"{v:.{dec}f}"
+    try:
+        v = float(v)
+        if not np.isfinite(v):
+            return "N/A"
+        if pct:
+            return f"{v * 100:.2f}%"
+        return f"{v:.{dec}f}"
+    except Exception:
+        return "N/A"
 
 def sig(v, ga=None, bl=None) -> str:
+    """Return a coloured signal word. Safe for None/NaN."""
     if v is None or (isinstance(v, float) and not np.isfinite(v)):
         return ""
     if ga is not None and v > ga:
-        return "Good —"
+        return "🟢 Good —"    # green circle
     if bl is not None and v < bl:
-        return "Weak —"
-    return "Moderate —"
+        return "🔴 Weak —"    # red circle
+    return "🟡 Moderate —"   # yellow circle
 
 def card(title: str, value_str: str, interp: str):
     st.markdown(f"""
@@ -812,20 +857,34 @@ with ch:
 st.markdown("---")
 
 # ── SESSION STATE CACHE KEY ───────────────────────────────────────────────────
-# Build a key from the current inputs. If it matches what's cached, we skip
-# re-fetching and re-optimising — even when the slider triggers a rerun.
 _cache_key = f"{sorted(selected_names)}|{period}|{opt_obj}|{investment}"
 
-# If Run was clicked, clear any stale cache for a different config
+# Run button always forces a fresh computation
 if run:
     st.session_state["_computed"]  = None
     st.session_state["_cache_key"] = None
 
-# Check if we have fresh cached results for the current inputs
+# Check if cached results match CURRENT widget state exactly
 _have_results = (
     st.session_state.get("_cache_key") == _cache_key
     and st.session_state.get("_computed") is not None
 )
+
+# If inputs changed but user has not clicked Run, warn them
+_stale = (
+    not _have_results
+    and st.session_state.get("_computed") is not None
+    and st.session_state.get("_cache_key") != _cache_key
+)
+
+# ── STALE DATA WARNING ────────────────────────────────────────────────────────
+if _stale:
+    st.warning(
+        "Your settings have changed since the last run. "
+        "Click **Run Optimisation** to update results with the new parameters."
+    )
+    # Restore from cache so old results remain visible while warning is shown
+    _have_results = True
 
 # ── SHOW LANDING PAGE if nothing computed yet ─────────────────────────────────
 if not _have_results and not run:
@@ -907,9 +966,17 @@ if not _have_results:
     with st.spinner("Fetching Nifty 50 benchmark…"):
         try:
             braw = yf.download("^NSEI", period=period, auto_adjust=True, progress=False)
-            bp   = braw["Close"].ffill().bfill() if "Close" in braw.columns else None
-            br   = bp.pct_change().replace([np.inf, -np.inf], np.nan).dropna() \
-                   if bp is not None and len(bp) > 5 else None
+            if braw.empty:
+                br = None
+            else:
+                if isinstance(braw.columns, pd.MultiIndex):
+                    bp = braw["Close"].iloc[:, 0].ffill().bfill()
+                elif "Close" in braw.columns:
+                    bp = braw["Close"].ffill().bfill()
+                else:
+                    bp = braw.iloc[:, 0].ffill().bfill()
+                bp = bp.squeeze()  # ensure Series
+                br = bp.pct_change().replace([np.inf, -np.inf], np.nan).dropna()                      if len(bp) > 5 else None
         except Exception:
             br = None
 
@@ -996,11 +1063,18 @@ with t1:
             x=cp.index, y=cp.values, name="Portfolio",
             line=dict(color="#7c6cf8", width=2.5)))
         if br is not None:
-            cb2 = (1 + br).cumprod() * 100 - 100
-            cb2 = cb2.reindex(cp.index, method="ffill")
-            fig_cum.add_trace(go.Scatter(
-                x=cb2.index, y=cb2.values, name="Nifty 50",
-                line=dict(color="#f97316", width=1.8, dash="dot")))
+            try:
+                cb2 = (1 + br).cumprod() * 100 - 100
+                # Align to portfolio dates by forward-filling on common dates
+                cb2.index = pd.to_datetime(cb2.index)
+                cp_idx    = pd.to_datetime(cp.index)
+                cb2 = cb2.reindex(cp_idx, method="ffill").dropna()
+                if len(cb2) > 1:
+                    fig_cum.add_trace(go.Scatter(
+                        x=cb2.index, y=cb2.values, name="Nifty 50",
+                        line=dict(color="#f97316", width=1.8, dash="dot")))
+            except Exception:
+                pass
         fig_cum.update_layout(
             title="Cumulative Return (%)",
             paper_bgcolor="rgba(2,11,24,0)",
@@ -1049,15 +1123,22 @@ with t2:
                         showscale=True, colorbar=dict(title="Sharpe"),
                         opacity=0.5)))
 
-        stock_vols = [safe_std(rets[n], annualise=True) * 100 for n in vn]
-        stock_rets = [safe_mean(rets[n], annualise=True) * 100 for n in vn]
-        fig_ef.add_trace(go.Scatter(
-            x=stock_vols, y=stock_rets,
-            mode="markers+text",
-            text=[n[:14] for n in vn],
-            textposition="top center",
-            name="Individual Stocks",
-            marker=dict(size=10, color="#f97316", symbol="diamond")))
+        raw_vols = [safe_std(rets[n], annualise=True) * 100 for n in vn]
+        raw_rets = [safe_mean(rets[n], annualise=True) * 100 for n in vn]
+        raw_names = [n[:14] for n in vn]
+        # Filter out any NaN/inf values that would crash plotly
+        valid = [(v, r, nm) for v, r, nm in zip(raw_vols, raw_rets, raw_names)
+                 if v is not None and r is not None
+                 and np.isfinite(v) and np.isfinite(r)]
+        if valid:
+            sv_x, sv_y, sv_n = zip(*valid)
+            fig_ef.add_trace(go.Scatter(
+                x=list(sv_x), y=list(sv_y),
+                mode="markers+text",
+                text=list(sv_n),
+                textposition="top center",
+                name="Individual Stocks",
+                marker=dict(size=10, color="#f97316", symbol="diamond")))
 
         fig_ef.add_trace(go.Scatter(
             x=[opt_v * 100], y=[opt_r * 100],
@@ -1105,62 +1186,53 @@ with t3:
     max_window  = max(5, min(60, n_obs // 4))
     default_win = min(21, max_window)
 
-    # Precompute returns matrix as numpy for speed
-    rets_np  = rets[vn].values.astype(float)          # shape (n_obs, n_stocks)
-    port_np  = pd_.values.astype(float)               # shape (n_obs,)
-    dates    = rets.index
+    # Build safe slider options — guarantee at least 2 distinct values
+    slider_opts = list(range(5, max_window + 1))
+    if len(slider_opts) < 2:
+        slider_opts = [5, max(6, max_window)]
+    safe_default = default_win if default_win in slider_opts else slider_opts[min(3, len(slider_opts)-1)]
 
     win = st.select_slider(
         "Rolling volatility window",
-        options=list(range(5, max_window + 1)),
-        value=default_win,
-        help=f"Drag to change window size. Max {max_window} days based on your data.",
+        options=slider_opts,
+        value=safe_default,
+        help=f"Window size in trading days. Max {max_window} days for this data length.",
     )
+    actual_win = int(win)
 
-    # Rolling volatility — fully guarded, computed purely with numpy
+    # Rolling volatility — uses pandas rolling (fast & clean data guaranteed above)
     try:
-        colors    = px.colors.qualitative.Vivid
-        fig_vol   = go.Figure()
+        min_p  = max(2, actual_win // 2)
+        colors = px.colors.qualitative.Vivid
+        fig_vol = go.Figure()
         any_trace = False
-        actual_win = int(win)
 
         for i, name in enumerate(vn):
-            col = rets_np[:, i]
-            vol_vals = []
-            for j in range(len(col)):
-                start = max(0, j - actual_win + 1)
-                window_data = col[start:j+1]
-                window_data = window_data[np.isfinite(window_data)]
-                if len(window_data) >= max(2, actual_win // 3):
-                    vol_vals.append(float(np.std(window_data, ddof=1)) * np.sqrt(TRADING_DAYS) * 100)
-                else:
-                    vol_vals.append(np.nan)
-            vol_series = pd.Series(vol_vals, index=dates)
-            clean = vol_series.dropna()
-            if len(clean) >= 2:
+            col_ret = rets[name].replace([np.inf, -np.inf], np.nan).dropna()
+            if len(col_ret) < min_p:
+                continue
+            rv = (col_ret.rolling(window=actual_win, min_periods=min_p).std()
+                  * np.sqrt(TRADING_DAYS) * 100)
+            rv = rv.replace([np.inf, -np.inf], np.nan).dropna()
+            if len(rv) >= 2:
                 fig_vol.add_trace(go.Scatter(
-                    x=clean.index, y=clean.values,
+                    x=rv.index, y=rv.values,
                     name=name[:16], mode="lines",
                     line=dict(width=1.5, color=colors[i % len(colors)])))
                 any_trace = True
 
-        # Portfolio line
-        pvol_vals = []
-        for j in range(len(port_np)):
-            start = max(0, j - actual_win + 1)
-            wd = port_np[start:j+1]
-            wd = wd[np.isfinite(wd)]
-            if len(wd) >= max(2, actual_win // 3):
-                pvol_vals.append(float(np.std(wd, ddof=1)) * np.sqrt(TRADING_DAYS) * 100)
-            else:
-                pvol_vals.append(np.nan)
-        pvol_series = pd.Series(pvol_vals, index=dates).dropna()
-        if len(pvol_series) >= 2:
-            fig_vol.add_trace(go.Scatter(
-                x=pvol_series.index, y=pvol_series.values,
-                name="PORTFOLIO", mode="lines",
-                line=dict(width=3, color="#fdf6e3", dash="dash")))
-            any_trace = True
+        # Portfolio rolling vol
+        port_s = pd_.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(port_s) >= min_p:
+            prv = (port_s.rolling(window=actual_win, min_periods=min_p).std()
+                   * np.sqrt(TRADING_DAYS) * 100)
+            prv = prv.replace([np.inf, -np.inf], np.nan).dropna()
+            if len(prv) >= 2:
+                fig_vol.add_trace(go.Scatter(
+                    x=prv.index, y=prv.values,
+                    name="PORTFOLIO", mode="lines",
+                    line=dict(width=3, color="#fdf6e3", dash="dash")))
+                any_trace = True
 
         if any_trace:
             fig_vol.update_layout(
@@ -1177,7 +1249,7 @@ with t3:
                                   color="#f5e6c8")
             st.plotly_chart(fig_vol, use_container_width=True)
         else:
-            st.info("Increase the data horizon to see rolling volatility at this window size.")
+            st.info("Not enough data for this window size. Use a smaller window or a longer horizon.")
     except Exception as e:
         st.warning(f"Rolling volatility chart: {e}")
 
